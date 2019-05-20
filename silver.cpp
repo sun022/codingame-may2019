@@ -87,14 +87,18 @@ int main()
         }
 
         int enemy_hq_y, enemy_hq_x;
+        int self_hq_y, self_hq_x;
         int buildingCount;
         cin >> buildingCount; cin.ignore();
         for (int i = 0; i < buildingCount; i++) {
             int owner, buildingType, x, y;
             cin >> owner >> buildingType >> x >> y; cin.ignore();
-            x++; y++;
+            y++; x++;
             if(owner == Player::ENEMY && buildingType == Building::HQ) {
                 enemy_hq_y = y; enemy_hq_x = x;
+            }
+            if(owner == Player::SELF && buildingType == Building::HQ) {
+                self_hq_y = y; self_hq_x = x;
             }
         }
 
@@ -111,8 +115,8 @@ int main()
             tier[y][x] = level;
         }
 
-        // distance to enemy hq
-        vector<vector<int>> dist = calc_dists(mask, enemy_hq_y, enemy_hq_x);
+        vector<vector<int>> dist_enemy_hq = calc_dists(mask, enemy_hq_y, enemy_hq_x);
+        vector<vector<int>> dist_self_hq = calc_dists(mask, self_hq_y, self_hq_x);
 
         string t="";
         // for each unit, move to random unoccupied adjancent space
@@ -126,7 +130,7 @@ int main()
                 if(!mask[y1][x1]) continue;
                 if(tier[y1][x1] > 0) continue; // can't get through unit (yet)
 
-                int pri = dist[y1][x1];
+                int pri = dist_enemy_hq[y1][x1];
                 if(owner[y1][x1] == Player::SELF) pri += 100;
                 if(owner[y1][x1] == Player::NEUTRAL) pri += 50;
                 if(pri < best_pri){
@@ -156,7 +160,7 @@ int main()
                         if(!mask[y1][x1] || owner[y1][x1] == Player::SELF) continue;
                         if(tier[y1][x1] > 0) continue; // can't get through unit (yet)
 
-                        int pri = dist[y1][x1];
+                        int pri = dist_enemy_hq[y1][x1];
                         if(pri < best_pri){
                             best_pri = pri;
                             new_unit_opt.clear();
