@@ -38,6 +38,20 @@ struct Unit {
     Unit(int unitId, int level, int y, int x):unitId(unitId),level(level),y(y),x(x){}
 };
 
+
+int gold, income, opponentGold, opponentIncome;
+
+int enemy_hq_y, enemy_hq_x;
+int self_hq_y, self_hq_x;
+
+vector<vector<int>> owner;
+vector<vector<int>> contains;
+vector<vector<int>> prot_tier;
+vector<vector<int>> unit_tier;
+
+vector<vector<bool>> mask;
+vector<vector<bool>> tower_reserved;
+
 vector<vector<int>> calc_dists(vector<vector<bool>> &mask, int tar_y, int tar_x){
     vector<vector<int>> dist(14, vector<int>(14,INT_MAX));
     queue<tuple<int,int,int>> q;
@@ -56,6 +70,58 @@ vector<vector<int>> calc_dists(vector<vector<bool>> &mask, int tar_y, int tar_x)
         }
     }
     return dist;
+}
+
+string check_for_ohk(){ // overpay tower tax for now, and ignore ability to gain ground for free by moving units
+    vector<vector<int>> cost(14, vector<int>(14, 1));
+    for(int i=0;i<14;i++){
+        for(int j=0;j<14;j++){
+            if(owner[j][i] == ENEMY){
+                if(prot_tier[j][i] == 3)
+                    cost[j][i] = 3;
+                if(contains[j][i] == UNIT){
+                    cost[j][i] = max(cost[j][i], min(3, unit_tier[j][i] + 1));
+                }
+            }
+        }
+    }
+    vector<vector<int>> total_cost(14, vector<int>(14, INT_MAX));
+    auto cmp = [](tuple<int,int,int> left, tuple<int,int,int> right) { return get<0>(left) > get<0>(right);};
+    priority_queue<tuple<int,int,int>, vector<tuple<int,int,int>>, decltype(cmp)> q(cmp);
+    for(int i=0;i<14;i++)
+        for(int j=0;j<14;j++)
+            if(owner[i][j] == SELF)
+                q.push({0, i, j});
+    while(!q.empty()){
+        auto [c, y, x] = q.top(); q.pop();
+        if(total_cost[y][x] != INT_MAX) continue;
+        total_cost[y][x] = c;
+        for(auto [dy, dx] : d4){
+            int y1 = y + dy;
+            int x1 = x + dx;
+            if(mask[y1][x1] && total_cost[y1][x1] == INT_MAX){
+                q.push({c + cost[y1][x1], y1, x1});
+            }
+        }
+    }
+
+    if(total_cost[enemy_hq_y][enemy_hq_x] > gold/10)
+        return "";
+    string t="";
+    int tar_y = enemy_hq_y, tar_x = enemy_hq_x;
+    while(total_cost[tar_y][tar_x] != 0){
+        t = "TRAIN " + to_string(cost[tar_y][tar_x]) + " " + to_string(tar_x-1) + " " + to_string(tar_y-1) + ";" + t;
+        for(auto [dy, dx] : d4){
+            int y1 = tar_y + dy;
+            int x1 = tar_x + dx;
+            if(total_cost[y1][x1] == total_cost[tar_y][tar_x] - cost[tar_y][tar_x]){
+                tar_y = y1;
+                tar_x = x1;
+                break;
+            }
+        }
+    }
+    return t;
 }
 
 bool adjancent_enemy(const vector<vector<bool>> &mask, const vector<vector<int>> &owner, const vector<vector<int>> &prot_tier, int y, int x) {
@@ -109,14 +175,14 @@ int main()
     }
 
     for(int tick=1;;tick++) {
-        int gold, income, opponentGold, opponentIncome;
-        vector<vector<int>>  owner(14, vector<int>(14, 2));
-        vector<vector<bool>> mask(14, vector<bool>(14, false));
-        vector<vector<int>>  prot_tier(14, vector<int>(14, 0));
-        vector<vector<int>>  contains(14, vector<int>(14, NONE));
-        vector<vector<int>>  unit_tier(14, vector<int>(14,0));
+        owner = vector<vector<int>>(14, vector<int>(14, 2));
+        prot_tier = vector<vector<int>>(14, vector<int>(14, 0));
+        contains = vector<vector<int>>(14, vector<int>(14, NONE));
+        unit_tier = vector<vector<int>>(14, vector<int>(14,0));
 
-        vector<vector<bool>> tower_reserved(14, vector<bool>(14,false));
+        tower_reserved = vector<vector<bool>>(14, vector<bool>(14,false));
+        mask = vector<vector<bool>>(14, vector<bool>(14, false));
+
         vector<Unit> units;
         vector<Unit> enemy_units;
 
@@ -134,8 +200,6 @@ int main()
             }
         }
 
-        int enemy_hq_y, enemy_hq_x;
-        int self_hq_y, self_hq_x;
         int buildingCount;
         cin >> buildingCount; cin.ignore();
         for (int i = 0; i < buildingCount; i++) {
@@ -175,6 +239,13 @@ int main()
 
         vector<vector<int>> dist_enemy_hq = calc_dists(mask, enemy_hq_y, enemy_hq_x);
         vector<vector<int>> dist_self_hq = calc_dists(mask, self_hq_y, self_hq_x);
+        
+        // check if we have the gold for OHK (overpay tower tax for now)
+        string x = check_for_ohk();
+        if(x != ""){
+            cout << x << endl;
+            continue;
+        }
 
         string t="";
         // look for enemy t2, unmatched
